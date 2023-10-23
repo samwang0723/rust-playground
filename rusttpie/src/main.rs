@@ -3,7 +3,15 @@ use clap::Parser;
 use colored::Colorize;
 use mime::Mime;
 use reqwest::{header, Client, Response, Url};
+use std::path::Path;
 use std::{collections::HashMap, str::FromStr};
+use syntect::{
+    dumps::{dump_to_file, from_dump_file},
+    easy::HighlightLines,
+    highlighting::{Style, Theme, ThemeSet},
+    parsing::SyntaxSet,
+    util::{as_24_bit_terminal_escaped, LinesWithEndings},
+};
 
 #[derive(Parser, Debug)]
 struct Opts {
@@ -79,11 +87,47 @@ fn print_header(resp: &Response) {
     print!("\n");
 }
 
+fn load_theme(tm_file: &str, enable_caching: bool) -> Theme {
+    let tm_path = Path::new(tm_file);
+
+    if enable_caching {
+        let tm_cache = tm_path.with_extension("tmdump");
+
+        if tm_cache.exists() {
+            from_dump_file(tm_cache).unwrap()
+        } else {
+            let theme = ThemeSet::get_theme(tm_path).unwrap();
+            dump_to_file(&theme, tm_cache).unwrap();
+            theme
+        }
+    } else {
+        ThemeSet::get_theme(tm_path).unwrap()
+    }
+}
+
+fn print_syntect(s: &str, ext: &str) {
+    let theme = load_theme("themes/brogrammer.tmTheme", true);
+    // Load these once at the start of your program
+    let ps = SyntaxSet::load_defaults_newlines();
+    let syntax = ps.find_syntax_by_extension(ext).unwrap();
+    let mut h = HighlightLines::new(syntax, &theme);
+    for line in LinesWithEndings::from(s) {
+        let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+        print!("{}", escaped);
+    }
+}
+
 fn print_body(m: Option<Mime>, body: &String) {
     match m {
         Some(v) if v == mime::APPLICATION_JSON => {
-            println!("{}", jsonxf::pretty_print(body).unwrap().cyan());
+            print_syntect(body, "json");
         }
+
+        Some(v) if v == mime::TEXT_HTML => {
+            print_syntect(body, "html");
+        }
+
         _ => println!("{}", body),
     }
 }
@@ -91,7 +135,9 @@ fn print_body(m: Option<Mime>, body: &String) {
 fn get_content_type(resp: &Response) -> Option<Mime> {
     resp.headers()
         .get(reqwest::header::CONTENT_TYPE)
-        .map(|v| v.to_str().unwrap().parse().unwrap())
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(';').next())
+        .and_then(|mime_str| mime_str.parse().ok())
 }
 
 async fn get(client: Client, args: &Get) -> Result<()> {
