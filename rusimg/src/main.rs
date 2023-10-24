@@ -1,3 +1,5 @@
+mod pb;
+
 struct ImageSpec {
     specs: Vec<Spec>,
 }
