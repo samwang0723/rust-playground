@@ -3,7 +3,7 @@ use photon_rs::transform::SamplingFilter;
 use prost::Message;
 use std::convert::TryFrom;
 
-mod abi; // 声明 abi.rs
+mod abi;
 pub use abi::*;
 
 impl ImageSpec {
@@ -12,7 +12,6 @@ impl ImageSpec {
     }
 }
 
-// 让 ImageSpec 可以生成一个字符串
 impl From<&ImageSpec> for String {
     fn from(image_spec: &ImageSpec) -> Self {
         let data = image_spec.encode_to_vec();
@@ -20,7 +19,6 @@ impl From<&ImageSpec> for String {
     }
 }
 
-// 让 ImageSpec 可以通过一个字符串创建。比如 s.parse().unwrap()
 impl TryFrom<&str> for ImageSpec {
     type Error = anyhow::Error;
 
@@ -30,7 +28,6 @@ impl TryFrom<&str> for ImageSpec {
     }
 }
 
-// 辅助函数，photon_rs 相应的方法里需要字符串
 impl filter::Filter {
     pub fn to_str(&self) -> Option<&'static str> {
         match self {
@@ -42,7 +39,6 @@ impl filter::Filter {
     }
 }
 
-// 在我们定义的 SampleFilter 和 photon_rs 的 SamplingFilter 间转换
 impl From<resize::SampleFilter> for SamplingFilter {
     fn from(v: resize::SampleFilter) -> Self {
         match v {
@@ -56,7 +52,6 @@ impl From<resize::SampleFilter> for SamplingFilter {
     }
 }
 
-// 提供一些辅助函数，让创建一个 spec 的过程简单一些
 impl Spec {
     pub fn new_resize_seam_carve(width: u32, height: u32) -> Self {
         Self {
