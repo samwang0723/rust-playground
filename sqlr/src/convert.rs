@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use polars::prelude::*;
 use sqlparser::ast::{
-    BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, FunctionArg, Offset as SqlOffset,
+    BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, FunctionArg, Ident, Offset as SqlOffset,
     OrderByExpr, Select, SelectItem, SetExpr, Statement, TableFactor, TableWithJoins,
     Value as SqlValue,
 };
@@ -140,6 +140,14 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
     fn try_from(p: Projection<'a>) -> Result<Self, Self::Error> {
         match p.0 {
             SelectItem::UnnamedExpr(SqlExpr::Identifier(id)) => Ok(col(&id.to_string())),
+            SelectItem::UnnamedExpr(SqlExpr::Function(func)) => {
+                Ok(count(match func.args.first() {
+                    Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident { value, .. }))) => {
+                        value.as_str()
+                    }
+                    _ => "",
+                }))
+            }
             SelectItem::ExprWithAlias {
                 expr: SqlExpr::Identifier(id),
                 alias,
@@ -152,7 +160,9 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 alias,
             } => Ok(Expr::Alias(
                 Box::new(count(match func.args.first() {
-                    Some(FunctionArg::Named { name, .. }) => name.value.as_str(),
+                    Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident { value, .. }))) => {
+                        value.as_str()
+                    }
                     _ => "",
                 })),
                 Arc::new(alias.to_string()),
