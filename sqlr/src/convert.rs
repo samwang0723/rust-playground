@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Result};
 use polars::prelude::*;
 use sqlparser::ast::{
-    BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, Offset as SqlOffset, OrderByExpr, Select,
-    SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value as SqlValue,
+    BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, FunctionArg, Offset as SqlOffset,
+    OrderByExpr, Select, SelectItem, SetExpr, Statement, TableFactor, TableWithJoins,
+    Value as SqlValue,
 };
 
 /// 解析出来的 SQL
@@ -61,6 +62,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
                 let mut selection = Vec::with_capacity(8);
                 for p in projection {
                     let expr = Projection(p).try_into()?;
+                    println!("expr: {:?}", expr);
                     selection.push(expr);
                 }
 
@@ -143,6 +145,16 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 alias,
             } => Ok(Expr::Alias(
                 Box::new(Expr::Column(Arc::new(id.to_string()))),
+                Arc::new(alias.to_string()),
+            )),
+            SelectItem::ExprWithAlias {
+                expr: SqlExpr::Function(func),
+                alias,
+            } => Ok(Expr::Alias(
+                Box::new(count(match func.args.first() {
+                    Some(FunctionArg::Named { name, .. }) => name.value.as_str(),
+                    _ => "",
+                })),
                 Arc::new(alias.to_string()),
             )),
             SelectItem::QualifiedWildcard(v) => Ok(col(&v.to_string())),
