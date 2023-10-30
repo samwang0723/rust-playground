@@ -140,14 +140,22 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
     fn try_from(p: Projection<'a>) -> Result<Self, Self::Error> {
         match p.0 {
             SelectItem::UnnamedExpr(SqlExpr::Identifier(id)) => Ok(col(&id.to_string())),
-            SelectItem::UnnamedExpr(SqlExpr::Function(func)) => {
-                Ok(count(match func.args.first() {
+            SelectItem::UnnamedExpr(SqlExpr::Function(func)) => match func.name.0[0].value.as_str()
+            {
+                "count" => Ok(count(match func.args.first() {
                     Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident { value, .. }))) => {
                         value.as_str()
                     }
                     _ => "",
-                }))
-            }
+                })),
+                "sum" => Ok(sum(match func.args.first() {
+                    Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident { value, .. }))) => {
+                        value.as_str()
+                    }
+                    _ => "",
+                })),
+                _ => Err(anyhow!("Function {} is not supported", func.name)),
+            },
             SelectItem::ExprWithAlias {
                 expr: SqlExpr::Identifier(id),
                 alias,
@@ -159,12 +167,21 @@ impl<'a> TryFrom<Projection<'a>> for Expr {
                 expr: SqlExpr::Function(func),
                 alias,
             } => Ok(Expr::Alias(
-                Box::new(count(match func.args.first() {
-                    Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident { value, .. }))) => {
-                        value.as_str()
-                    }
-                    _ => "",
-                })),
+                Box::new(match func.name.0[0].value.as_str() {
+                    "count" => Ok(count(match func.args.first() {
+                        Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident {
+                            value, ..
+                        }))) => value.as_str(),
+                        _ => "",
+                    })),
+                    "sum" => Ok(sum(match func.args.first() {
+                        Some(FunctionArg::Unnamed(SqlExpr::Identifier(Ident {
+                            value, ..
+                        }))) => value.as_str(),
+                        _ => "",
+                    })),
+                    _ => Err(anyhow!("Function {} is not supported", func.name)),
+                }?),
                 Arc::new(alias.to_string()),
             )),
             SelectItem::QualifiedWildcard(v) => Ok(col(&v.to_string())),

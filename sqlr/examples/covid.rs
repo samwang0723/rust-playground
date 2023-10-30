@@ -8,7 +8,7 @@ async fn main() -> Result<()> {
     let url = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/latest/owid-covid-latest.csv";
 
     let sql = format!(
-        "SELECT count(new_deaths) FROM {} where new_deaths >= 20 ORDER BY new_cases DESC",
+        "SELECT avg(new_deaths) nd FROM {} where new_deaths >= 20 ORDER BY new_cases DESC",
         url
     );
 
