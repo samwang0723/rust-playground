@@ -2,6 +2,7 @@ mod engine;
 use crate::engine::fetcher::fetch_content;
 use crate::engine::parser::{ConcentrationStrategy, Parser};
 
+use std::env;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task;
@@ -9,18 +10,24 @@ use tokio::task;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    let proxy_api_key = env::var("PROXY_API_KEY").unwrap();
     // List of URLs to process
-    let urls: Vec<String> = vec![
-        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_1.djhtm".to_string(),
-        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_2.djhtm".to_string(),
-        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_3.djhtm".to_string(),
-        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_4.djhtm".to_string(),
-        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_5.djhtm".to_string(),
-        // ...add more URLs here
-    ];
+    let urls = generate_urls(proxy_api_key.as_str(), "2330").await;
 
     // Call the task_management function to process the URLs
     task_management(urls).await;
+}
+
+async fn generate_urls(proxy_api_key: &str, stock_id: &str) -> Vec<String> {
+    let mut urls: Vec<String> = Vec::new();
+    for i in 1..=5 {
+        urls.push(format!(
+            "https://api.webscrapingapi.com/v1?url=https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm&api_key={}",
+            stock_id, i, proxy_api_key
+        ));
+    }
+    urls
 }
 
 async fn task_management(urls: Vec<String>) {
