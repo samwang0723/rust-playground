@@ -1,65 +1,64 @@
 mod engine;
 use crate::engine::fetcher::fetch_content;
-use scraper::{Html, Selector};
-use std::error::Error;
+use crate::engine::parser::{ConcentrationStrategy, Parser};
 
-#[derive(Debug)]
-struct ParsedData {
-    total_buy: String,
-    total_sell: String,
-}
-
-// async fn parse_html(html_str: &str) -> Result<ParsedData, Box<dyn Error>> {
-//     let fragment = Html::parse_document(html_str);
-//     let td_selector = match Selector::parse("td") {
-//         Ok(selector) => selector,
-//         Err(e) => {
-//             eprintln!("Failed to create selector: {}", e);
-//             return Err(Box::new(e));
-//         }
-//     };
-//
-//     let mut elements = fragment.select(&td_selector);
-//     let mut total_buy = String::new();
-//     let mut total_sell = String::new();
-//
-//     while let Some(element) = elements.next() {
-//         let text = element.text().collect::<Vec<_>>().join("");
-//         if text == "合計買超張數" {
-//             if let Some(next_element) = elements.next() {
-//                 total_buy = next_element.text().collect::<Vec<_>>().join("");
-//             }
-//         } else if text == "合計賣超張數" {
-//             if let Some(next_element) = elements.next() {
-//                 total_sell = next_element.text().collect::<Vec<_>>().join("");
-//             }
-//         }
-//     }
-//
-//     Ok(ParsedData {
-//         total_buy,
-//         total_sell,
-//     })
-// }
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task;
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() {
     tracing_subscriber::fmt::init();
+    // List of URLs to process
+    let urls: Vec<String> = vec![
+        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_1.djhtm".to_string(),
+        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_2.djhtm".to_string(),
+        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_3.djhtm".to_string(),
+        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_4.djhtm".to_string(),
+        "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_5.djhtm".to_string(),
+        // ...add more URLs here
+    ];
 
-    let url = "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_3704_1.djhtm";
-    let body = match fetch_content(url).await {
-        Ok(body) => body,
-        Err(e) => {
-            return Err(e);
-        }
-    };
-    println!("body: {:?}", body);
+    // Call the task_management function to process the URLs
+    task_management(urls).await;
+}
 
-    // let parsed_data = parse_html(&body).await?;
-    // println!(
-    //     "total_buy: {}, total_sell: {}",
-    //     parsed_data.total_buy, parsed_data.total_sell
-    // );
+async fn task_management(urls: Vec<String>) {
+    // Create a semaphore with 3 permits
+    let semaphore = Arc::new(Semaphore::new(3));
 
-    Ok(())
+    // Create a vector to hold the task handles
+    let mut handles = Vec::new();
+
+    for url in urls {
+        // Clone the Arc containing the semaphore for the task
+        let sem_clone = Arc::clone(&semaphore);
+
+        // Spawn a new task
+        let handle = task::spawn(async move {
+            // Acquire a permit from the semaphore
+            let _permit = sem_clone.acquire().await.unwrap();
+            // Now this task holds a permit, so only 3 tasks can hold a permit at a time
+
+            let body = fetch_content(url.to_owned()).await.unwrap();
+            let parser = Parser::new(ConcentrationStrategy);
+            match parser.parse(&body.content).await {
+                Ok(res) => println!("res: {}", res),
+                Err(_e) => (),
+            };
+
+            // For example, you can print the URL being processed:
+            println!("Processed URL: {}", url);
+        });
+
+        // Store the handle so we can await it later
+        handles.push(handle);
+    }
+
+    // Await all the tasks to complete
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    println!("All tasks complete");
 }
