@@ -41,6 +41,12 @@ impl ParseStrategy for ConcentrationStrategy {
         let mut total_sell = String::new();
         while let Some(element) = elements.next() {
             let text = element.text().collect::<Vec<_>>().join("");
+
+            let bytes: &[u8] = text.as_bytes();
+            let hex_strings: Vec<String> = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+            let hex_string = hex_strings.join("");
+            println!("Hex String: {}", hex_string);
+
             if text == "合計買超張數" {
                 if let Some(next_element) = elements.next() {
                     total_buy = next_element.text().collect::<Vec<_>>().join("");

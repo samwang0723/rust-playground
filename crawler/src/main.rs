@@ -19,12 +19,12 @@ async fn main() {
     task_management(urls).await;
 }
 
-async fn generate_urls(proxy_api_key: &str, stock_id: &str) -> Vec<String> {
+async fn generate_urls(_proxy_api_key: &str, stock_id: &str) -> Vec<String> {
     let mut urls: Vec<String> = Vec::new();
     for i in 1..=5 {
         urls.push(format!(
-            "https://api.webscrapingapi.com/v1?url=https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm&api_key={}",
-            stock_id, i, proxy_api_key
+            "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm",
+            stock_id, i
         ));
     }
     urls
