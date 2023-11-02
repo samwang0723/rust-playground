@@ -25,7 +25,20 @@ impl Model {
         match result {
             Ok(parsed_data) => {
                 // Successfully parsed all strings into i32
-                println!("{:?}", parsed_data);
+                let mut current = 0;
+                let mut total = 0;
+                let mut sum = [0; 5];
+                let trade_days = Model::trade_days(&self.exchange_date);
+                for (index, value) in parsed_data.iter().rev().enumerate() {
+                    println!("{}: {}", index, value);
+                    total += value;
+                    let now: u32 = (index as u32) + 1;
+                    if trade_days.contains(&now) {
+                        sum[current] = total;
+                        current += 1;
+                    }
+                }
+                self.concentration = Some(Concentration(sum[0], sum[1], sum[2], sum[3], sum[4]));
             }
             Err(e) => {
                 // Handle parse error
@@ -35,7 +48,18 @@ impl Model {
         self
     }
 
-    pub fn calc_trade_days(&self, end_date: &str, look_back_days: u32) -> i32 {
+    fn trade_days(end_date: &str) -> [u32; 5] {
+        let look_back_periods = [1, 5, 10, 20, 60];
+        let mut trading_days_array = [0; 5]; // Initialize an array to hold the results
+
+        for (i, &period) in look_back_periods.iter().enumerate() {
+            trading_days_array[i] = Model::total_trade_days(end_date, period);
+        }
+
+        trading_days_array
+    }
+
+    fn total_trade_days(end_date: &str, look_back_days: u32) -> u32 {
         // List of non-trading dates as strings
         let non_trading_dates_str = ["20231010", "20231008"];
 
@@ -72,20 +96,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_calc_trade_days() {
-        let model = Model {
-            stock_id: "2330".to_string(),
-            exchange_date: "20231013".to_string(),
-            concentration: None,
-        };
-
+    fn test_total_trade_days() {
         // Define the end date and look back days
         let end_date = "20231013";
         let look_back_days = 5;
         // Calculate the expected result
         let expected_result = 4; // Assuming there are 4 active trading days within the given range
                                  // Call the method and get the actual result
-        let actual_result = model.calc_trade_days(end_date, look_back_days);
+        let actual_result = Model::total_trade_days(end_date, look_back_days);
         // Assert that the actual result matches the expected result
         assert_eq!(actual_result, expected_result);
     }
@@ -100,6 +118,10 @@ mod tests {
             concentration: None,
         };
 
-        model.concentration(raw_data);
+        let m = model
+            .concentration(raw_data)
+            .concentration
+            .unwrap_or(Concentration(0, 0, 0, 0, 0));
+        assert_eq!(m.0, 916);
     }
 }
