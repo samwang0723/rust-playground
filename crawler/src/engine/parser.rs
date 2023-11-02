@@ -42,16 +42,13 @@ impl ParseStrategy for ConcentrationStrategy {
         while let Some(element) = elements.next() {
             let text = element.text().collect::<Vec<_>>().join("");
 
-            let bytes: &[u8] = text.as_bytes();
-            let hex_strings: Vec<String> = bytes.iter().map(|b| format!("{:02x}", b)).collect();
-            let hex_string = hex_strings.join("");
-            println!("Hex String: {}", hex_string);
-
-            if text == "合計買超張數" {
+            // unfortunately, proxy service encoded big5 into utf-8 and cannot be reverted
+            // directly match the utf-8 string is the fastest way
+            if text == "合計買超張數" || text == "�X�p�R�W�i��" {
                 if let Some(next_element) = elements.next() {
                     total_buy = next_element.text().collect::<Vec<_>>().join("");
                 }
-            } else if text == "合計賣超張數" {
+            } else if text == "合計賣超張數" || text == "�X�p��W�i��" {
                 if let Some(next_element) = elements.next() {
                     total_sell = next_element.text().collect::<Vec<_>>().join("");
                 }
