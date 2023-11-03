@@ -1,11 +1,22 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use regex::Regex;
 use scraper::{Html, Selector};
 
+use super::*;
+
 #[async_trait]
-pub trait ParseStrategy {
+pub trait ParseStrategy: Conversion {
     type Error;
-    async fn parse(&self, payload: &str) -> Result<String, Self::Error>;
+    type Input;
+    // Declare an associated type that will be the return type of the parse method.
+    type Output;
+
+    async fn parse(&self, payload: Self::Input) -> Result<Self::Output, Self::Error>;
+}
+
+pub trait Conversion {
+    fn to_i32(&self, data: &str) -> Result<i32, anyhow::Error>;
 }
 
 #[derive(Debug)]
@@ -14,9 +25,17 @@ pub struct DailyCloseStrategy;
 #[async_trait]
 impl ParseStrategy for DailyCloseStrategy {
     type Error = anyhow::Error;
+    type Input = String;
+    type Output = String;
 
-    async fn parse(&self, _payload: &str) -> Result<String, Self::Error> {
-        Err(anyhow!("DailyCloseStrategy not yet implemented"))
+    async fn parse(&self, _payload: Self::Input) -> Result<Self::Output, Self::Error> {
+        Err(anyhow!("DailyCloseStrategy parse not yet implemented"))
+    }
+}
+
+impl Conversion for DailyCloseStrategy {
+    fn to_i32(&self, _data: &str) -> Result<i32, anyhow::Error> {
+        Err(anyhow!("DailyCloseStrategy to_i32 not yet implemented"))
     }
 }
 
@@ -26,9 +45,22 @@ pub struct ConcentrationStrategy;
 #[async_trait]
 impl ParseStrategy for ConcentrationStrategy {
     type Error = anyhow::Error;
+    type Input = fetcher::Payload;
+    type Output = model::ProcCon;
 
-    async fn parse(&self, payload: &str) -> Result<String, Self::Error> {
-        let fragment = Html::parse_document(payload);
+    async fn parse(&self, payload: Self::Input) -> Result<Self::Output, Self::Error> {
+        let re = Regex::new(r"zco_(\d+)_(\d+)").unwrap();
+        let captures = match re.captures(&payload.source) {
+            Some(captures) => captures,
+            None => {
+                return Err(anyhow!("Invalid URL"));
+            }
+        };
+
+        let stock_id = captures.get(1).map_or("", |m| m.as_str());
+        let con_index = captures.get(2).map_or("", |m| m.as_str());
+
+        let fragment = Html::parse_document(payload.content.as_str());
         let td_selector = match Selector::parse("td") {
             Ok(selector) => selector,
             Err(e) => {
@@ -37,8 +69,8 @@ impl ParseStrategy for ConcentrationStrategy {
         };
 
         let mut elements = fragment.select(&td_selector);
-        let mut total_buy = String::new();
-        let mut total_sell = String::new();
+        let mut total_buy = 0;
+        let mut total_sell = 0;
         while let Some(element) = elements.next() {
             let text = element.text().collect::<Vec<_>>().join("");
 
@@ -46,18 +78,28 @@ impl ParseStrategy for ConcentrationStrategy {
             // directly match the utf-8 string is the fastest way
             if text == "合計買超張數" || text == "�X�p�R�W�i��" {
                 if let Some(next_element) = elements.next() {
-                    total_buy = next_element.text().collect::<Vec<_>>().join("");
+                    let buy = next_element.text().collect::<Vec<_>>().join("");
+                    total_buy = self.to_i32(&buy)?;
                 }
             } else if text == "合計賣超張數" || text == "�X�p��W�i��" {
                 if let Some(next_element) = elements.next() {
-                    total_sell = next_element.text().collect::<Vec<_>>().join("");
+                    let sell = next_element.text().collect::<Vec<_>>().join("");
+                    total_sell = self.to_i32(&sell)?;
                 }
             }
         }
-        Ok(format!(
-            "total_buy: {}, total_sell: {}",
-            total_buy, total_sell
+        Ok(model::ProcCon(
+            stock_id.to_string(),
+            self.to_i32(con_index)?,
+            total_buy - total_sell,
         ))
+    }
+}
+
+impl Conversion for ConcentrationStrategy {
+    fn to_i32(&self, data: &str) -> Result<i32, anyhow::Error> {
+        let without_comma = data.replace(',', ""); // This will do nothing if there is no comma
+        without_comma.parse::<i32>().map_err(|e| anyhow!(e))
     }
 }
 
@@ -71,7 +113,7 @@ impl<T: ParseStrategy> Parser<T> {
         Self { strategy }
     }
 
-    pub async fn parse(&self, payload: &str) -> Result<String, T::Error> {
+    pub async fn parse(&self, payload: T::Input) -> Result<T::Output, T::Error> {
         self.strategy.parse(payload).await
     }
 }
