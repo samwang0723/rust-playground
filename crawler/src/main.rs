@@ -88,12 +88,8 @@ async fn task_management(urls: Vec<String>) {
                 exchange_date: formatted_date.clone(),
                 concentration: vec![0; 5],
             });
-        let mut i = proc_con.1;
-        // backfill the missing index 4 (40 days replaced with 60 days)
-        if i == 5 {
-            i -= 1;
-        }
-        model.concentration[i] = proc_con.2;
+
+        model.concentration[proc_con.1] = proc_con.2;
     }
 
     println!("All tasks complete: {:?}", stock_map)

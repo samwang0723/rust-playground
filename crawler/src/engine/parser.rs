@@ -93,9 +93,16 @@ impl ParseStrategy for ConcentrationStrategy {
                 }
             }
         }
+
+        // backfill the missing index 4 (40 days replaced with 60 days)
+        let id = if con_index == 6 {
+            con_index - 2
+        } else {
+            con_index - 1
+        };
         Ok(model::ProcCon(
             stock_id.to_string(),
-            con_index - 1,
+            id,
             total_buy - total_sell,
         ))
     }
