@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use std::collections::HashSet;
 
 #[derive(Debug)]
@@ -29,10 +29,11 @@ impl Model {
                 let mut total = 0;
                 let mut sum = [0; 5];
                 let trade_days = Model::trade_days(&self.exchange_date);
+                println!("{:?}", trade_days);
                 for (index, value) in parsed_data.iter().rev().enumerate() {
-                    println!("{}: {}", index, value);
                     total += value;
                     let now: u32 = (index as u32) + 1;
+                    println!("{}: {}: {}: {}", index, value, total, now);
                     if trade_days.contains(&now) {
                         sum[current] = total;
                         current += 1;
@@ -49,7 +50,7 @@ impl Model {
     }
 
     fn trade_days(end_date: &str) -> [u32; 5] {
-        let look_back_periods = [1, 5, 10, 20, 60];
+        let look_back_periods = [0, 4, 9, 19, 59];
         let mut trading_days_array = [0; 5]; // Initialize an array to hold the results
 
         for (i, &period) in look_back_periods.iter().enumerate() {
@@ -74,6 +75,7 @@ impl Model {
 
         // Calculate the start date
         let start_date = parsed_end_date - Duration::days(look_back_days as i64);
+        println!("{}: {}", start_date, parsed_end_date);
 
         // Initialize a counter for active trading days
         let mut active_trading_days = 0;
@@ -81,7 +83,10 @@ impl Model {
         // Iterate through the date range and count active trading days
         let mut current_date = start_date;
         while current_date <= parsed_end_date {
-            if !non_trading_dates.contains(&current_date) {
+            if !non_trading_dates.contains(&current_date)
+                && current_date.weekday() != Weekday::Sat
+                && current_date.weekday() != Weekday::Sun
+            {
                 active_trading_days += 1;
             }
             current_date += Duration::days(1);
@@ -99,9 +104,9 @@ mod tests {
     fn test_total_trade_days() {
         // Define the end date and look back days
         let end_date = "20231013";
-        let look_back_days = 5;
+        let look_back_days = 8;
         // Calculate the expected result
-        let expected_result = 4; // Assuming there are 4 active trading days within the given range
+        let expected_result = 6; // Assuming there are 4 active trading days within the given range
                                  // Call the method and get the actual result
         let actual_result = Model::total_trade_days(end_date, look_back_days);
         // Assert that the actual result matches the expected result
@@ -110,11 +115,11 @@ mod tests {
 
     #[test]
     fn concentration() {
-        let raw_data = "0829,0830,0831,0901,0904,0905,0906,0907,0908,0911,0912,0913,0914,0915,0918,0919,0920,0921,0922,0925,0926,0927,0928,1002,1003,1004,1005,1006,1011,1012,1013,1016,1017,1018,1019,1020,1023,1024,1025,1026,1027,1030,1031,1101,1102 46.65,46.8,47.4,46.95,46.55,48.15,50.3,52,52.2,51.8,55.5,54.5,54.5,52.8,51.7,51,50.2,49.2,50.4,50.7,50.1,48.4,50,50.5,49,48.3,50.1,49.1,48,47.7,46.9,46.35,47.8,49.15,51.7,51.1,49.7,52.3,53.8,53.2,54.2,54.5,54.6,53.6,54.5 -40,17,127,-261,-164,78,-283,-5876,-502,-1276,3546,-1689,751,-1009,290,105,136,404,68,-354,-94,-1476,-98,-260,-1138,-658,553,-1009,-715,-618,-353,-174,-176,-685,5004,-1779,-1435,1576,3518,-2273,1969,1752,352,-321,916";
+        let raw_data = "0829,0830,0831,0901,0904,0905,0906,0907,0908,0911,0912,0913,0914,0915,0918,0919,0920,0921,0922,0925,0926,0927,0928,1002,1003,1004,1005,1006,1011,1012,1013,1016,1017,1018,1019,1020,1023,1024,1025,1026,1027,1030,1031,1101,1102 552,555,549,548,557,552,550,542,539,536,544,541,550,558,540,538,535,527,522,525,519,522,523,533,529,520,528,532,544,550,553,545,551,540,546,556,544,544,544,531,533,532,529,528,547 -428,2418,-4000,-677,2973,-2626,-1831,-8478,-6884,-6360,-1847,-1518,5168,2712,-17717,-11724,-12536,-17889,-13464,-3626,-12418,-1125,-1729,3858,-1162,-9581,866,2608,17231,11984,9583,-2257,4446,-3918,1300,12924,-6163,-2148,1185,-10261,-1739,-5803,-5392,-2397,10537";
 
         let model = Model {
             stock_id: "2330".to_string(),
-            exchange_date: "20231013".to_string(),
+            exchange_date: "20231102".to_string(),
             concentration: None,
         };
 
@@ -123,5 +128,9 @@ mod tests {
             .concentration
             .unwrap_or(Concentration(0, 0, 0, 0, 0));
         assert_eq!(m.0, 916);
+        assert_eq!(m.1, 5173);
+        assert_eq!(m.2, 4502);
+        assert_eq!(m.3, 916);
+        assert_eq!(m.4, 916);
     }
 }
