@@ -115,8 +115,7 @@ impl Conversion for ConcentrationStrategy {
     }
 
     fn to_usize(&self, data: &str) -> Result<usize, anyhow::Error> {
-        let without_comma = data.replace(',', ""); // This will do nothing if there is no comma
-        without_comma.parse::<usize>().map_err(|e| anyhow!(e))
+        data.parse::<usize>().map_err(|e| anyhow!(e))
     }
 }
 

@@ -92,5 +92,8 @@ async fn task_management(urls: Vec<String>) {
         model.concentration[proc_con.1] = proc_con.2;
     }
 
-    println!("All tasks complete: {:?}", stock_map)
+    // extract items from map and print json string
+    for (_, model) in stock_map.iter() {
+        println!("{}", model.to_json().unwrap());
+    }
 }
