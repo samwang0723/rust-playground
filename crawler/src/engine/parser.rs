@@ -17,6 +17,7 @@ pub trait ParseStrategy: Conversion {
 
 pub trait Conversion {
     fn to_i32(&self, data: &str) -> Result<i32, anyhow::Error>;
+    fn to_usize(&self, data: &str) -> Result<usize, anyhow::Error>;
 }
 
 #[derive(Debug)]
@@ -36,6 +37,10 @@ impl ParseStrategy for DailyCloseStrategy {
 impl Conversion for DailyCloseStrategy {
     fn to_i32(&self, _data: &str) -> Result<i32, anyhow::Error> {
         Err(anyhow!("DailyCloseStrategy to_i32 not yet implemented"))
+    }
+
+    fn to_usize(&self, _data: &str) -> Result<usize, anyhow::Error> {
+        Err(anyhow!("DailyCloseStrategy to_usize not yet implemented"))
     }
 }
 
@@ -58,7 +63,7 @@ impl ParseStrategy for ConcentrationStrategy {
         };
 
         let stock_id = captures.get(1).map_or("", |m| m.as_str());
-        let con_index = captures.get(2).map_or("", |m| m.as_str());
+        let con_index = self.to_usize(captures.get(2).map_or("", |m| m.as_str()))?;
 
         let fragment = Html::parse_document(payload.content.as_str());
         let td_selector = match Selector::parse("td") {
@@ -90,7 +95,7 @@ impl ParseStrategy for ConcentrationStrategy {
         }
         Ok(model::ProcCon(
             stock_id.to_string(),
-            self.to_i32(con_index)?,
+            con_index - 1,
             total_buy - total_sell,
         ))
     }
@@ -100,6 +105,11 @@ impl Conversion for ConcentrationStrategy {
     fn to_i32(&self, data: &str) -> Result<i32, anyhow::Error> {
         let without_comma = data.replace(',', ""); // This will do nothing if there is no comma
         without_comma.parse::<i32>().map_err(|e| anyhow!(e))
+    }
+
+    fn to_usize(&self, data: &str) -> Result<usize, anyhow::Error> {
+        let without_comma = data.replace(',', ""); // This will do nothing if there is no comma
+        without_comma.parse::<usize>().map_err(|e| anyhow!(e))
     }
 }
 

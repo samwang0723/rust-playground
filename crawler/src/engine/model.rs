@@ -6,4 +6,4 @@ pub struct Model {
 }
 
 #[derive(Debug)]
-pub struct ProcCon(pub String, pub i32, pub i32);
+pub struct ProcCon(pub String, pub usize, pub i32);

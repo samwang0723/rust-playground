@@ -29,7 +29,12 @@ async fn main() {
 
 fn generate_urls(proxy_api_key: &str, stock_id: &str) -> Vec<String> {
     let mut urls: Vec<String> = Vec::new();
-    for i in 1..=5 {
+    for i in 1..=6 {
+        // skip the 40 days calculation
+        if i == 5 {
+            continue;
+        }
+
         urls.push(format!(
             "https://api.webscrapingapi.com/v1?url=https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm&api_key={}",
             stock_id, i, proxy_api_key
@@ -83,7 +88,11 @@ async fn task_management(urls: Vec<String>) {
                 exchange_date: formatted_date.clone(),
                 concentration: vec![0; 5],
             });
-        let i: usize = usize::from((proc_con.1 - 1) as u8);
+        let mut i = proc_con.1;
+        // backfill the missing index 4 (40 days replaced with 60 days)
+        if i == 5 {
+            i -= 1;
+        }
         model.concentration[i] = proc_con.2;
     }
 
