@@ -1,14 +1,14 @@
 mod engine;
-use crate::engine::fetcher::fetch_content;
+use crate::engine::fetcher::{fetch_content, Payload};
 use crate::engine::model::Model;
 use crate::engine::parser::{ConcentrationStrategy, Parser};
 
 use chrono::{Datelike, Local};
 use std::collections::HashMap;
 use std::env;
+use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Semaphore};
-use tokio::task;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
@@ -16,80 +16,103 @@ async fn main() {
 
     let proxy_api_key = env::var("PROXY_API_KEY").unwrap();
     // List of URLs to process
-    let stocks = ["2330", "2363", "8150"];
-    let mut all_urls = Vec::new();
+    let stocks = vec!["2330", "2363", "8150"];
+
+    let capacity = stocks.len() * 5;
+    let (url_tx, url_rx) = mpsc::channel(capacity);
+
+    // retrieve all handles and ensure process not termiated before tasks completed
+    let url_generation_handle = tokio::spawn(generate_urls(proxy_api_key, stocks.clone(), url_tx));
+    let parse_aggregate_handle = tokio::spawn(parse_data(url_rx, capacity));
+
+    // Await on both handles to ensure completion
+    let _results = tokio::try_join!(url_generation_handle, parse_aggregate_handle);
+}
+
+async fn generate_urls(proxy_api_key: String, stocks: Vec<&str>, sender: mpsc::Sender<String>) {
     for stock in stocks.iter() {
-        let urls = generate_urls(proxy_api_key.as_str(), stock);
-        all_urls.extend(urls);
-    }
+        for i in 1..=6 {
+            // skip the 40 days calculation
+            if i == 5 {
+                continue;
+            }
 
-    // Call the task_management function to process the URLs
-    task_management(all_urls).await;
-}
+            let url = format!(
+                "https://api.webscrapingapi.com/v1?url=https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm&api_key={}",
+                stock, i, proxy_api_key
+            );
 
-fn generate_urls(proxy_api_key: &str, stock_id: &str) -> Vec<String> {
-    let mut urls: Vec<String> = Vec::new();
-    for i in 1..=6 {
-        // skip the 40 days calculation
-        if i == 5 {
-            continue;
+            sender.send(url).await.unwrap();
         }
-
-        urls.push(format!(
-            "https://api.webscrapingapi.com/v1?url=https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{}_{}.djhtm&api_key={}",
-            stock_id, i, proxy_api_key
-        ));
     }
-    urls
+
+    drop(sender);
 }
 
-async fn task_management(urls: Vec<String>) {
-    // Create a semaphore with 3 permits
+async fn parse_data(mut url_rx: mpsc::Receiver<String>, capacity: usize) {
     let semaphore = Arc::new(Semaphore::new(50));
+    let (content_tx, content_rx) = mpsc::channel(capacity);
 
-    // Channel for collecting results
-    let (tx, mut rx) = mpsc::channel(urls.len());
+    let fetch_handle = tokio::spawn(async move {
+        while let Some(url) = url_rx.recv().await {
+            print!(".");
+            io::stdout().flush().unwrap();
 
-    for url in urls {
-        // Clone the Arc containing the semaphore for the task
-        let sem_clone = Arc::clone(&semaphore);
-        let tx_clone = tx.clone();
+            let sem_clone = Arc::clone(&semaphore);
+            let content_tx_clone = content_tx.clone();
+            tokio::spawn(async move {
+                let _permit = sem_clone
+                    .acquire()
+                    .await
+                    .expect("Failed to acquire semaphore permit");
 
-        // Spawn a new task
-        task::spawn(async move {
-            // Acquire a permit from the semaphore
-            let permit = sem_clone.acquire().await.unwrap();
-            // Now this task holds a permit, so only 3 tasks can hold a permit at a time
+                match fetch_content(url.clone()).await {
+                    Ok(payload) => {
+                        print!("_");
+                        io::stdout().flush().unwrap();
 
-            let body = fetch_content(url.to_owned()).await.unwrap();
-            let parser = Parser::new(ConcentrationStrategy);
-            let res = parser.parse(body).await.unwrap();
-            drop(permit);
+                        if let Err(e) = content_tx_clone.send(payload).await {
+                            eprintln!("Failed to send content: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to fetch content for URL {}: {}", url, e);
+                        // continue to the next URL without sending anything to content_tx
+                    }
+                }
+                // Permit is automatically released when dropped
+            });
+        }
+    });
 
-            tx_clone.send(res).await.unwrap();
+    let aggregate_handle = tokio::spawn(aggregate(content_rx));
 
-            // For example, you can print the URL being processed:
-            println!("Processed URL: {}", url);
-        });
-    }
+    // Await on both handles to ensure completion
+    let _results = tokio::try_join!(fetch_handle, aggregate_handle);
+}
 
-    // Collect results
-    drop(tx); // Close the sender to let the receiver know when all messages are sent
-
+async fn aggregate(mut content_rx: mpsc::Receiver<Payload>) {
     let today = Local::now();
     let formatted_date = format!("{}{:02}{:02}", today.year(), today.month(), today.day());
     let mut stock_map: HashMap<String, Model> = HashMap::new();
 
-    while let Some(proc_con) = rx.recv().await {
-        let model = stock_map
-            .entry(proc_con.0.clone())
-            .or_insert_with(|| Model {
-                stock_id: proc_con.0,
-                exchange_date: formatted_date.clone(),
-                concentration: vec![0; 5],
-            });
+    while let Some(payload) = content_rx.recv().await {
+        let url = payload.source.clone();
+        let parser = Parser::new(ConcentrationStrategy);
+        let res = parser.parse(payload).await;
 
-        model.concentration[proc_con.1] = proc_con.2;
+        if let Ok(res_value) = res {
+            let model = stock_map
+                .entry(res_value.0.clone())
+                .or_insert_with(|| Model {
+                    stock_id: res_value.0,
+                    exchange_date: formatted_date.clone(),
+                    concentration: vec![0; 5],
+                });
+            model.concentration[res_value.1] = res_value.2;
+        } else if let Err(e) = res {
+            eprintln!("Failed to parse content for URL {}: {}", url, e);
+        }
     }
 
     // extract items from map and print json string
