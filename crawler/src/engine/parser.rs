@@ -47,15 +47,10 @@ impl Conversion for DailyCloseStrategy {
 #[derive(Debug)]
 pub struct ConcentrationStrategy;
 
-#[async_trait]
-impl ParseStrategy for ConcentrationStrategy {
-    type Error = anyhow::Error;
-    type Input = fetcher::Payload;
-    type Output = model::ProcCon;
-
-    async fn parse(&self, payload: Self::Input) -> Result<Self::Output, Self::Error> {
-        let re = Regex::new(r"zco_(\d+)_(\d+)").unwrap();
-        let captures = match re.captures(&payload.source) {
+impl ConcentrationStrategy {
+    fn identifier(&self, url: String) -> Result<(String, usize), anyhow::Error> {
+        let re = Regex::new(r"zco_(\d+)_(\d+)")?;
+        let captures = match re.captures(&url) {
             Some(captures) => captures,
             None => {
                 return Err(anyhow!("Invalid URL"));
@@ -63,7 +58,28 @@ impl ParseStrategy for ConcentrationStrategy {
         };
 
         let stock_id = captures.get(1).map_or("", |m| m.as_str());
-        let con_index = self.to_usize(captures.get(2).map_or("", |m| m.as_str()))?;
+        let index = self.to_usize(captures.get(2).map_or("", |m| m.as_str()))?;
+
+        // backfill the missing index 4 (40 days replaced with 60 days)
+        let pos = if index == 6 { index - 2 } else { index - 1 };
+
+        Ok((stock_id.to_string(), pos))
+    }
+}
+
+#[async_trait]
+impl ParseStrategy for ConcentrationStrategy {
+    type Error = anyhow::Error;
+    type Input = fetcher::Payload;
+    type Output = model::Concentration;
+
+    async fn parse(&self, payload: Self::Input) -> Result<Self::Output, Self::Error> {
+        let (stock_id, pos) = match self.identifier(payload.source.clone()) {
+            Ok((stock_id, pos)) => (stock_id, pos),
+            Err(e) => {
+                return Err(anyhow!("Failed to parse URL: {}", e));
+            }
+        };
 
         let fragment = Html::parse_document(payload.content.as_str());
         let td_selector = match Selector::parse("td") {
@@ -94,17 +110,7 @@ impl ParseStrategy for ConcentrationStrategy {
             }
         }
 
-        // backfill the missing index 4 (40 days replaced with 60 days)
-        let id = if con_index == 6 {
-            con_index - 2
-        } else {
-            con_index - 1
-        };
-        Ok(model::ProcCon(
-            stock_id.to_string(),
-            id,
-            total_buy - total_sell,
-        ))
+        Ok(model::Concentration(stock_id, pos, total_buy - total_sell))
     }
 }
 

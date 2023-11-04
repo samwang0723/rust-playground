@@ -16,4 +16,4 @@ impl Model {
 }
 
 #[derive(Debug)]
-pub struct ProcCon(pub String, pub usize, pub i32);
+pub struct Concentration(pub String, pub usize, pub i32);
