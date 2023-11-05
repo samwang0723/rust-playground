@@ -32,7 +32,8 @@ async fn main() {
 }
 
 async fn generate_urls(url_tx: mpsc::Sender<String>, stocks: Vec<&str>) {
-    let proxy_api_key = env::var("PROXY_API_KEY").unwrap();
+    let proxy_api_key =
+        env::var("PROXY_API_KEY").expect("PROXY_API_KEY not found in the environment");
     let proxy_url = format!("{}?api_key={}", PROXY_URL, proxy_api_key);
     for stock in stocks.iter() {
         for i in 1..=CONCENTRATION_PAGES {
@@ -44,7 +45,7 @@ async fn generate_urls(url_tx: mpsc::Sender<String>, stocks: Vec<&str>) {
             );
             let crawl_url = format!("{}&url={}", proxy_url, url);
 
-            url_tx.send(crawl_url).await.unwrap();
+            url_tx.send(crawl_url).await.expect("Failed to send URL");
         }
     }
 
