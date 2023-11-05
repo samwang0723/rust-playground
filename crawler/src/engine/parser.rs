@@ -81,33 +81,30 @@ impl ParseStrategy for ConcentrationStrategy {
             }
         };
 
-        let fragment = Html::parse_document(payload.content.as_str());
-        let td_selector = match Selector::parse("td") {
+        let document = Html::parse_document(payload.content.as_str());
+        let selector = match Selector::parse("td.t3n1[colspan]") {
             Ok(selector) => selector,
             Err(e) => {
                 return Err(anyhow!("Failed to create selector: {}", e));
             }
         };
 
-        let mut elements = fragment.select(&td_selector);
+        let mut index: usize = 0;
         let mut total_buy = 0;
         let mut total_sell = 0;
-        while let Some(element) = elements.next() {
-            let text = element.text().collect::<Vec<_>>().join("");
-
-            // unfortunately, proxy service encoded big5 into utf-8 and cannot be reverted
-            // directly match the utf-8 string is the fastest way
-            if text == "合計買超張數" || text == "�X�p�R�W�i��" {
-                if let Some(next_element) = elements.next() {
-                    let buy = next_element.text().collect::<Vec<_>>().join("");
-                    total_buy = self.to_i32(&buy)?;
-                }
-            } else if text == "合計賣超張數" || text == "�X�p��W�i��" {
-                if let Some(next_element) = elements.next() {
-                    let sell = next_element.text().collect::<Vec<_>>().join("");
-                    total_sell = self.to_i32(&sell)?;
+        for element in document.select(&selector) {
+            if let Some(colspan) = element.value().attr("colspan") {
+                if colspan != "4" {
+                    continue;
                 }
             }
+            let text = element.text().collect::<Vec<_>>().join("");
+            match index {
+                0 => total_buy = self.to_i32(&text)?,
+                1 => total_sell = self.to_i32(&text)?,
+                _ => {}
+            }
+            index += 1;
         }
 
         Ok(model::Concentration(stock_id, pos, total_buy - total_sell))
