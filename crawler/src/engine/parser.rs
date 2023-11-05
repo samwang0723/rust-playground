@@ -136,3 +136,73 @@ impl<T: ParseStrategy> Parser<T> {
         self.strategy.parse(payload).await
     }
 }
+
+// Testcases for ConcentrationStrategy parse and to_i32, to_usize
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_concentration_strategy_parse() {
+        let strategy = ConcentrationStrategy {};
+        let payload = fetcher::Payload {
+            content_type: "text/html".to_string(),
+            source: "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_2330_2.djhtm".to_string(),
+            content: r##"<table class="hasBorder" width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#F0F0F0"><TR>
+            <TD class="t4t1" nowrap><a href="/z/zc/zco/zco0/zco0.djhtm?a=3704&b=0035003300380045&BHID=5380">第一金-自由</a></TD>
+            <TD class="t3n1">34</TD>
+            <TD class="t3n1">8</TD>
+            <TD class="t3n1">26</TD>
+            <TD class="t3n1">0.32%</TD>
+            <TD class="t4t1" nowrap><a href="/z/zc/zco/zco0/zco0.djhtm?a=3704&b=0039003200300041&BHID=9200">凱基-板橋</a></TD>
+            <TD class="t3n1">2</TD>
+            <TD class="t3n1">36</TD>
+            <TD class="t3n1">34</TD>
+            <TD class="t3n1">0.42%</TD>
+            </tr>
+            <TR id="oScrollFoot">
+            <TD class="t4t1" nowrap>合計買超張數</td>
+            <td class="t3n1" colspan=4>2,108</td>
+            <TD class="t4t1" nowrap>合計賣超張數</td>
+            <td class="t3n1" colspan=4>1,252</td>
+            </TR>
+            <TR id="oScrollFoot">
+            <TD class="t4t1" nowrap>平均買超成本</td>
+            <td class="t3n1" colspan=4>54.59</td>
+            <TD class="t4t1" nowrap>平均賣超成本</td>
+            <td class="t3n1" colspan=4>54.32</td>
+            </TR>
+            <TR id="oScrollFoot">
+            <td class="t3t1" colspan=10>
+            【註1】上述買賣超個股僅提供排序後的前15名券商，且未計入自營商部份。<BR>
+            【註2】合計買超或賣超，為上述家數合計。<BR>
+            【註3】平均買超或賣超成本，為上述家數合計買賣超金額/上述家數合計買賣超張數。
+            </td>
+            </TR></table>"##
+            .to_string(),
+        };
+
+        let result = strategy.parse(payload).await;
+        assert!(result.is_ok());
+        let concentration = result.unwrap();
+        assert_eq!(concentration.0, "2330");
+        assert_eq!(concentration.1, 1);
+        assert_eq!(concentration.2, 856);
+    }
+
+    #[test]
+    fn test_concentration_strategy_to_i32() {
+        let strategy = ConcentrationStrategy {};
+        let result = strategy.to_i32("1,845,919");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1845919);
+    }
+
+    #[test]
+    fn test_concentration_strategy_to_usize() {
+        let strategy = ConcentrationStrategy {};
+        let result = strategy.to_usize("2");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2);
+    }
+}

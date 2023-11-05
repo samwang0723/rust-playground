@@ -71,3 +71,40 @@ impl<'a> Fetch for FileFetcher<'a> {
         })
     }
 }
+
+// Testcases for fetch_content, using mock on http and files
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fetch_content_http() {
+        // Request a new server from the pool
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+        let mock = server
+            .mock("GET", "/")
+            .with_status(200)
+            .with_header("content-type", "text/html")
+            .with_body("Hello World")
+            .create_async()
+            .await;
+
+        let payload = fetch_content(url.as_str()).await.unwrap();
+        assert_eq!(payload.content, "Hello World");
+        assert_eq!(payload.source, url);
+        assert_eq!(payload.content_type, "text/html");
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_fetch_content_file() {
+        let payload = fetch_content("file://Cargo.toml").await.unwrap();
+        assert!(payload.content.contains("version"));
+        assert_eq!(payload.source, "file://Cargo.toml");
+        assert_eq!(payload.content_type, "text/plain");
+    }
+}

@@ -17,3 +17,24 @@ impl Model {
 
 #[derive(Debug)]
 pub struct Concentration(pub String, pub usize, pub i32);
+
+// Testcases for Model
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_model_to_json() {
+        let model = Model {
+            stock_id: String::from("AAPL"),
+            exchange_date: String::from("2020-01-01"),
+            concentration: vec![1, 2, 3],
+        };
+
+        let json_string = model.to_json().unwrap();
+        assert_eq!(
+            json_string,
+            r#"{"stock_id":"AAPL","exchange_date":"2020-01-01","concentration":[1,2,3]}"#
+        );
+    }
+}
